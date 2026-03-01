@@ -161,8 +161,14 @@ async function main(): Promise<void> {
   try {
     config = loadConfig();
     console.error(`claude-lsp-bridge: loaded config for workspace ${config.workspaceDir}`);
-  } catch {
-    console.error('claude-lsp-bridge: no config found at startup — will auto-detect from file paths');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith('No LSP config found')) {
+      console.error('claude-lsp-bridge: no config found at startup — will auto-detect from file paths');
+    } else {
+      console.error('claude-lsp-bridge: failed to load config:', message);
+      process.exit(1);
+    }
   }
 
   const manager = new LspManager(config);
