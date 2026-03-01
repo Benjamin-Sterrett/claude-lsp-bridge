@@ -130,6 +130,40 @@ export function utf16ToCharOffset(text: string, utf16Offset: number): number {
   return charOffset;
 }
 
+/**
+ * Convert a codepoint offset to a UTF-8 byte offset within a line.
+ */
+export function charOffsetToUtf8(text: string, charOffset: number): number {
+  let bytes = 0;
+  let count = 0;
+  for (const char of text) {
+    if (count >= charOffset) break;
+    const cp = char.codePointAt(0)!;
+    if (cp <= 0x7F) bytes += 1;
+    else if (cp <= 0x7FF) bytes += 2;
+    else if (cp <= 0xFFFF) bytes += 3;
+    else bytes += 4;
+    count++;
+  }
+  return bytes;
+}
+
+/**
+ * Convert a 0-based codepoint character offset to the offset expected
+ * by the given position encoding.
+ */
+export function encodeCharacterOffset(
+  lineText: string,
+  charOffset: number,
+  encoding: PositionEncoding,
+): number {
+  switch (encoding) {
+    case 'utf-16': return charOffsetToUtf16(lineText, charOffset);
+    case 'utf-8': return charOffsetToUtf8(lineText, charOffset);
+    case 'utf-32': return charOffset; // UTF-32 = codepoint offset
+  }
+}
+
 // ── Tool Result Types ──
 
 export interface ToolSuccess {

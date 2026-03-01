@@ -47,6 +47,9 @@ export class LspClient {
   // Diagnostics cache: uri → DiagnosticsEntry
   private diagnosticsCache = new Map<string, DiagnosticsEntry>();
 
+  // Last sync timestamp per URI (for staleness detection when version is unavailable)
+  private lastSyncTime = new Map<string, number>();
+
   constructor(config: LspServerConfig, workspaceDir: string) {
     this.language = config.language;
     this.config = config;
@@ -226,6 +229,14 @@ export class LspClient {
     return this.diagnosticsCache.get(uri);
   }
 
+  getDocumentVersion(uri: string): number | undefined {
+    return this.openDocuments.get(uri)?.version;
+  }
+
+  getLastSyncTime(uri: string): number | undefined {
+    return this.lastSyncTime.get(uri);
+  }
+
   async syncFile(filePath: string): Promise<string> {
     await this.ensureReady();
     const uri = filePathToUri(filePath);
@@ -235,6 +246,7 @@ export class LspClient {
     if (!existing) {
       // First time — didOpen (or didChange for change-only servers)
       this.openDocuments.set(uri, { version: 1, content });
+      this.lastSyncTime.set(uri, Date.now());
       if (this.openCloseSupported) {
         await this.connection!.sendNotification('textDocument/didOpen', {
           textDocument: {
@@ -256,6 +268,7 @@ export class LspClient {
       // Content changed — didChange (full text)
       const newVersion = existing.version + 1;
       this.openDocuments.set(uri, { version: newVersion, content });
+      this.lastSyncTime.set(uri, Date.now());
       if (this.syncKind !== TextDocumentSyncKind.None) {
         await this.connection!.sendNotification('textDocument/didChange', {
           textDocument: { uri, version: newVersion },
