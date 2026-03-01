@@ -242,11 +242,11 @@ export class LspClient {
     const uri = filePathToUri(filePath);
     const content = readFileSync(filePath, 'utf-8');
     const existing = this.openDocuments.get(uri);
-    this.lastSyncTime.set(uri, Date.now());
 
     if (!existing) {
       // First time — didOpen (or didChange for change-only servers)
       this.openDocuments.set(uri, { version: 1, content });
+      this.lastSyncTime.set(uri, Date.now());
       if (this.openCloseSupported) {
         await this.connection!.sendNotification('textDocument/didOpen', {
           textDocument: {
@@ -268,6 +268,7 @@ export class LspClient {
       // Content changed — didChange (full text)
       const newVersion = existing.version + 1;
       this.openDocuments.set(uri, { version: newVersion, content });
+      this.lastSyncTime.set(uri, Date.now());
       if (this.syncKind !== TextDocumentSyncKind.None) {
         await this.connection!.sendNotification('textDocument/didChange', {
           textDocument: { uri, version: newVersion },
