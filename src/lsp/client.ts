@@ -148,14 +148,20 @@ export class LspClient {
       workspaceFolders: [
         { uri: filePathToUri(this.workspaceDir), name: 'workspace' },
       ],
+      initializationOptions: this.config.initializationOptions,
     };
 
+    let initTimer: ReturnType<typeof setTimeout> | undefined;
     const result = await Promise.race([
       this.connection.sendRequest<InitializeResult>('initialize', initParams),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`LSP initialize timed out after ${INIT_TIMEOUT_MS}ms`)), INIT_TIMEOUT_MS)
-      ),
+      new Promise<never>((_, reject) => {
+        initTimer = setTimeout(
+          () => reject(new Error(`LSP initialize timed out after ${INIT_TIMEOUT_MS}ms`)),
+          INIT_TIMEOUT_MS,
+        );
+      }),
     ]);
+    clearTimeout(initTimer);
 
     // Parse server capabilities
     const caps = result.capabilities;
@@ -234,6 +240,9 @@ export class LspClient {
     if (this.disposed) throw new Error(`LspClient(${this.language}) is disposed`);
     if (this.initialized && this.connection) return;
 
+    // Serialize restart — if already restarting, wait for that attempt
+    if (this.initPromise) return this.initPromise;
+
     // Attempt restart if process died
     if (this.restartCount >= 1) {
       throw new Error(
@@ -244,24 +253,31 @@ export class LspClient {
 
     this.restartCount++;
     console.error(`[${this.language}] Attempting restart (attempt ${this.restartCount})...`);
-    await new Promise((resolve) => setTimeout(resolve, RESTART_BACKOFF_MS));
 
-    // Re-init from scratch
-    await this.spawnAndInit();
+    this.initPromise = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, RESTART_BACKOFF_MS));
 
-    // Rehydrate: re-open all previously tracked documents
-    for (const [uri, doc] of this.openDocuments) {
-      if (this.syncKind !== TextDocumentSyncKind.None) {
-        await this.connection!.sendNotification('textDocument/didOpen', {
-          textDocument: {
-            uri,
-            languageId: this.language,
-            version: doc.version,
-            text: doc.content,
-          },
-        });
+      // Re-init from scratch
+      await this.spawnAndInit();
+
+      // Rehydrate: re-open all previously tracked documents
+      for (const [uri, doc] of this.openDocuments) {
+        if (this.syncKind !== TextDocumentSyncKind.None) {
+          await this.connection!.sendNotification('textDocument/didOpen', {
+            textDocument: {
+              uri,
+              languageId: this.language,
+              version: doc.version,
+              text: doc.content,
+            },
+          });
+        }
       }
-    }
+    })().finally(() => {
+      this.initPromise = null;
+    });
+
+    return this.initPromise;
   }
 
   async shutdown(): Promise<void> {
