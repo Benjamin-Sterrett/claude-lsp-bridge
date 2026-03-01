@@ -18,13 +18,13 @@ export async function findSymbol(
 ): Promise<ToolResult> {
   const clients = params.language
     ? [await manager.getClientForLanguage(params.language)]
-    : manager.getInitializedClients();
+    : await manager.getAllClients();
 
   if (clients.length === 0) {
     return toolSuccess('No language servers available for symbol search.');
   }
 
-  const allSymbols: Array<{ name: string; kind: string; file: string; line: number; container?: string }> = [];
+  const allSymbols: Array<{ name: string; kind: string; file: string; line?: number; container?: string }> = [];
 
   for (const client of clients) {
     const result = await client.sendRequest<SymbolInformation[] | WorkspaceSymbol[] | null>(
@@ -38,12 +38,12 @@ export async function findSymbol(
         const loc = sym.location;
         const filePath = safeUriToPath(loc.uri) ?? loc.uri;
         const hasRange = 'range' in loc;
-        const pos = hasRange ? toExternalPosition((loc as Location).range.start) : { line: 1 };
+        const pos = hasRange ? toExternalPosition((loc as Location).range.start) : undefined;
         allSymbols.push({
           name: sym.name,
           kind: symbolKindName(sym.kind),
           file: filePath,
-          line: pos.line,
+          line: pos?.line,
           container: 'containerName' in sym ? sym.containerName ?? undefined : undefined,
         });
       }
@@ -57,7 +57,8 @@ export async function findSymbol(
   const lines: string[] = [`## Symbols matching "${params.query}" (${allSymbols.length})`];
   for (const s of allSymbols) {
     const container = s.container ? ` (in ${s.container})` : '';
-    lines.push(`- **${s.name}** [${s.kind}] ${s.file}:${s.line}${container}`);
+    const location = s.line !== undefined ? `${s.file}:${s.line}` : s.file;
+    lines.push(`- **${s.name}** [${s.kind}] ${location}${container}`);
   }
 
   return toolSuccess(lines.join('\n'));

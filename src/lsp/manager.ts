@@ -83,6 +83,14 @@ export class LspManager {
     return [...this.clients.values()];
   }
 
+  async getAllClients(): Promise<LspClient[]> {
+    const clients: LspClient[] = [];
+    for (const server of this.config.languageServers) {
+      clients.push(await this.getClientForLanguage(server.language));
+    }
+    return clients;
+  }
+
   async shutdownAll(): Promise<void> {
     const promises = [...this.clients.values()].map((c) => c.shutdown());
     await Promise.allSettled(promises);

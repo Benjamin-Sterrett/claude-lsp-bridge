@@ -80,12 +80,14 @@ describe('findSymbol', () => {
     assert.ok(text.includes('No symbols found matching "EMPTY"'), 'should report no matches');
   });
 
-  it('returns message when no clients available', async () => {
+  it('initializes all servers for unscoped search', async () => {
     const { manager } = setup();
-    const result = await findSymbol(manager, { query: 'anything' });
+    // Unscoped search (no language filter) should initialize configured servers
+    // and return results — not report "no servers available"
+    const result = await findSymbol(manager, { query: 'MyClass' });
     const text = getText(result);
 
-    assert.ok(text.includes('No language servers available'), 'should report no servers');
+    assert.ok(text.includes('MyClass'), 'should find symbols from initialized server');
   });
 });
 
