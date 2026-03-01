@@ -170,7 +170,8 @@ export class LspClient {
     } catch (err) {
       clearTimeout(initTimer);
       // Clean up spawned process on init failure
-      this.connection.dispose();
+      // Note: connection may already be null if process exit handler fired first
+      this.connection?.dispose();
       this.connection = null;
       if (this.process) {
         const proc = this.process;
