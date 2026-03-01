@@ -22,6 +22,10 @@ SCOPE="user"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --scope)
+      if [ $# -lt 2 ]; then
+        echo "Error: --scope requires a value (local, user, or project)" >&2
+        exit 1
+      fi
       SCOPE="$2"
       shift 2
       ;;
