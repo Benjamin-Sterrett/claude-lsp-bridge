@@ -38,6 +38,7 @@ export class LspClient {
   private disposed = false;
   private restartCount = 0;
   private syncKind: TextDocumentSyncKind = TextDocumentSyncKind.None;
+  private openCloseSupported = false;
   private positionEncoding: PositionEncoding = 'utf-16';
 
   // Track open documents: uri → { version, content }
@@ -55,7 +56,10 @@ export class LspClient {
   async initialize(): Promise<void> {
     if (this.initialized || this.disposed) return;
     if (this.initPromise) return this.initPromise;
-    this.initPromise = this.spawnAndInit().finally(() => {
+    this.initPromise = (async () => {
+      await this.spawnAndInit();
+      await this.rehydrateDocuments();
+    })().finally(() => {
       this.initPromise = null;
     });
     return this.initPromise;
@@ -179,13 +183,17 @@ export class LspClient {
     // Parse server capabilities
     const caps = result.capabilities;
 
-    // Determine sync kind — validate server supports Full
+    // Determine sync kind and openClose support
     if (typeof caps.textDocumentSync === 'number') {
       this.syncKind = caps.textDocumentSync;
+      // Numeric sync kind implies openClose support
+      this.openCloseSupported = caps.textDocumentSync !== TextDocumentSyncKind.None;
     } else if (caps.textDocumentSync && typeof caps.textDocumentSync === 'object') {
-      this.syncKind = ((caps.textDocumentSync as { change?: number }).change ?? TextDocumentSyncKind.None) as TextDocumentSyncKind;
+      const syncOpts = caps.textDocumentSync as { change?: number; openClose?: boolean };
+      this.syncKind = (syncOpts.change ?? TextDocumentSyncKind.None) as TextDocumentSyncKind;
+      this.openCloseSupported = syncOpts.openClose ?? false;
     }
-    if (this.syncKind === TextDocumentSyncKind.None) {
+    if (this.syncKind === TextDocumentSyncKind.None && !this.openCloseSupported) {
       console.warn(`[${this.language}] Server does not support document sync`);
     }
 
@@ -219,7 +227,7 @@ export class LspClient {
     if (!existing) {
       // First time — didOpen
       this.openDocuments.set(uri, { version: 1, content });
-      if (this.syncKind !== TextDocumentSyncKind.None) {
+      if (this.openCloseSupported) {
         await this.connection!.sendNotification('textDocument/didOpen', {
           textDocument: {
             uri,
@@ -275,27 +283,29 @@ export class LspClient {
         throw new Error(`LspClient(${this.language}) was disposed during restart`);
       }
 
-      // Re-init from scratch
+      // Re-init from scratch + rehydrate open documents
       await this.spawnAndInit();
-
-      // Rehydrate: re-open all previously tracked documents
-      for (const [uri, doc] of this.openDocuments) {
-        if (this.syncKind !== TextDocumentSyncKind.None) {
-          await this.connection!.sendNotification('textDocument/didOpen', {
-            textDocument: {
-              uri,
-              languageId: this.language,
-              version: doc.version,
-              text: doc.content,
-            },
-          });
-        }
-      }
+      await this.rehydrateDocuments();
     })().finally(() => {
       this.initPromise = null;
     });
 
     return this.initPromise;
+  }
+
+  private async rehydrateDocuments(): Promise<void> {
+    for (const [uri, doc] of this.openDocuments) {
+      if (this.openCloseSupported) {
+        await this.connection!.sendNotification('textDocument/didOpen', {
+          textDocument: {
+            uri,
+            languageId: this.language,
+            version: doc.version,
+            text: doc.content,
+          },
+        });
+      }
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -310,10 +320,12 @@ export class LspClient {
     if (this.connection && this.initialized) {
       try {
         // Close all open documents
-        for (const uri of this.openDocuments.keys()) {
-          await this.connection.sendNotification('textDocument/didClose', {
-            textDocument: { uri },
-          });
+        if (this.openCloseSupported) {
+          for (const uri of this.openDocuments.keys()) {
+            await this.connection.sendNotification('textDocument/didClose', {
+              textDocument: { uri },
+            });
+          }
         }
         this.openDocuments.clear();
 
