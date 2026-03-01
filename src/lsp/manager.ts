@@ -1,15 +1,21 @@
-import { extname } from 'node:path';
+import { dirname, extname } from 'node:path';
 import { LspClient } from './client.ts';
-import type { LspConfig, LspServerConfig } from '../config.ts';
+import { autoDetectConfig, type LspConfig, type LspServerConfig } from '../config.ts';
 
 export class LspManager {
-  private config: LspConfig;
+  private config: LspConfig | null;
   private clients = new Map<string, LspClient>();
   // extension → server config mapping (built from config)
   private extensionMap = new Map<string, LspServerConfig>();
 
-  constructor(config: LspConfig) {
+  constructor(config: LspConfig | null) {
     this.config = config;
+    if (config) {
+      this.buildExtensionMap(config);
+    }
+  }
+
+  private buildExtensionMap(config: LspConfig): void {
     const seenLanguages = new Set<string>();
     for (const server of config.languageServers) {
       if (seenLanguages.has(server.language)) {
@@ -33,13 +39,36 @@ export class LspManager {
     }
   }
 
+  /**
+   * Attempt to resolve config from a file path using auto-detection.
+   * Called lazily when no config was provided at startup.
+   */
+  private resolveConfigFromFile(filePath: string): void {
+    const detected = autoDetectConfig(dirname(filePath));
+    if (!detected) {
+      throw new Error(
+        `No LSP config available and could not auto-detect workspace from '${filePath}'. ` +
+        `Ensure the file is inside a project with tsconfig.json, package.json, or pyproject.toml.`
+      );
+    }
+    this.config = detected;
+    this.extensionMap.clear();
+    this.buildExtensionMap(detected);
+    console.error(`claude-lsp-bridge: auto-detected workspace at ${detected.workspaceDir}`);
+  }
+
   async getClientForFile(filePath: string): Promise<LspClient> {
     const ext = extname(filePath).toLowerCase();
     if (!ext) {
       throw new Error(
         `Cannot determine language server for '${filePath}': no file extension. ` +
-        `Configured extensions: ${[...this.extensionMap.keys()].join(', ')}`
+        `Configured extensions: ${this.config ? [...this.extensionMap.keys()].join(', ') : '(none — no config loaded)'}`
       );
+    }
+
+    // Lazy config detection: if no config at startup, detect from file path
+    if (!this.config) {
+      this.resolveConfigFromFile(filePath);
     }
 
     const serverConfig = this.extensionMap.get(ext);
@@ -52,7 +81,7 @@ export class LspManager {
 
     let client = this.clients.get(serverConfig.language);
     if (!client) {
-      client = new LspClient(serverConfig, this.config.workspaceDir);
+      client = new LspClient(serverConfig, this.config!.workspaceDir);
       this.clients.set(serverConfig.language, client);
     }
 
@@ -66,6 +95,12 @@ export class LspManager {
   }
 
   async getClientForLanguage(language: string): Promise<LspClient> {
+    if (!this.config) {
+      throw new Error(
+        `No LSP config available. Call a file-based tool first to auto-detect workspace, ` +
+        `or set the LSP_CONFIG environment variable.`
+      );
+    }
     let client = this.clients.get(language);
     if (!client) {
       const serverConfig = this.config.languageServers.find((s) => s.language === language);
@@ -84,6 +119,10 @@ export class LspManager {
   }
 
   async getAllClients(): Promise<LspClient[]> {
+    if (!this.config) {
+      // No config — return only already-initialized clients (may be empty)
+      return this.getInitializedClients();
+    }
     const clients: LspClient[] = [];
     for (const server of this.config.languageServers) {
       clients.push(await this.getClientForLanguage(server.language));
