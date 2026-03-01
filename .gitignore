@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.js.map
+lsp-config.local.json
+.handoff.md
+.auto-resume.md
+.workflow/

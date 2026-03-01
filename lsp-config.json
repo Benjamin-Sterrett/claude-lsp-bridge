@@ -1,0 +1,17 @@
+{
+  "workspaceDir": ".",
+  "languageServers": [
+    {
+      "language": "typescript",
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx"]
+    },
+    {
+      "language": "python",
+      "command": "pyright-langserver",
+      "args": ["--stdio"],
+      "extensions": [".py", ".pyi"]
+    }
+  ]
+}
