@@ -17,7 +17,7 @@ export async function findSymbol(
   params: FindSymbolParams,
 ): Promise<ToolResult> {
   const clients = params.language
-    ? [await getClientByLanguage(manager, params.language)]
+    ? [await manager.getClientForLanguage(params.language)]
     : manager.getInitializedClients();
 
   if (clients.length === 0) {
@@ -63,11 +63,3 @@ export async function findSymbol(
   return toolSuccess(lines.join('\n'));
 }
 
-async function getClientByLanguage(manager: LspManager, language: string) {
-  const client = manager.getClient(language);
-  if (!client) {
-    throw new Error(`No language server for '${language}'`);
-  }
-  await client.initialize();
-  return client;
-}

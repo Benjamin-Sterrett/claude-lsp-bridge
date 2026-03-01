@@ -29,9 +29,11 @@ export async function getDiagnostics(
   await new Promise((resolve) => setTimeout(resolve, waitMs));
 
   const entry = client.getDiagnostics(uri);
+  const docVersion = client.getDocumentVersion(uri);
   let status: DiagnosticStatus;
 
-  if (!entry) {
+  // No diagnostics received at all, or diagnostics are from an older document version
+  if (!entry || (docVersion !== undefined && entry.version !== undefined && entry.version < docVersion)) {
     status = 'indexing';
     return toolSuccess(
       `## Diagnostics\n\n**Status:** ${status}\n\nNo diagnostics received yet. ` +

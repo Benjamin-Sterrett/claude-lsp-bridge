@@ -226,6 +226,10 @@ export class LspClient {
     return this.diagnosticsCache.get(uri);
   }
 
+  getDocumentVersion(uri: string): number | undefined {
+    return this.openDocuments.get(uri)?.version;
+  }
+
   async syncFile(filePath: string): Promise<string> {
     await this.ensureReady();
     const uri = filePathToUri(filePath);

@@ -65,6 +65,20 @@ export class LspManager {
     return this.clients.get(language);
   }
 
+  async getClientForLanguage(language: string): Promise<LspClient> {
+    let client = this.clients.get(language);
+    if (!client) {
+      const serverConfig = this.config.languageServers.find((s) => s.language === language);
+      if (!serverConfig) {
+        throw new Error(`No language server configured for '${language}'`);
+      }
+      client = new LspClient(serverConfig, this.config.workspaceDir);
+      this.clients.set(language, client);
+    }
+    await client.initialize();
+    return client;
+  }
+
   getInitializedClients(): LspClient[] {
     return [...this.clients.values()];
   }
