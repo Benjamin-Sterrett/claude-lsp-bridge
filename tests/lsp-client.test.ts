@@ -299,4 +299,41 @@ describe('LspManager', () => {
     const c = await manager.getClientForFile(join(dir, 'test.TS'));
     assert.equal(c.language, 'typescript');
   });
+
+  it('starts with null config and auto-detects from file path', async () => {
+    const dir = makeTempDir();
+    // Create a tsconfig.json marker so auto-detection works
+    writeFileSync(join(dir, 'tsconfig.json'), '{}');
+    writeFileSync(join(dir, 'test.ts'), 'export const x = 1;');
+
+    manager = new LspManager(null);
+    const c = await manager.getClientForFile(join(dir, 'test.ts'));
+    assert.equal(c.language, 'typescript');
+  });
+
+  it('returns empty array from getAllClients with null config', async () => {
+    manager = new LspManager(null);
+    const clients = await manager.getAllClients();
+    assert.equal(clients.length, 0);
+  });
+
+  it('throws helpful error from getClientForLanguage with null config', async () => {
+    manager = new LspManager(null);
+    await assert.rejects(
+      () => manager!.getClientForLanguage('typescript'),
+      /No LSP config available/,
+    );
+  });
+
+  it('throws when auto-detection fails for file outside any project', async () => {
+    const dir = makeTempDir();
+    // No marker files — auto-detection will fail
+    writeFileSync(join(dir, 'orphan.ts'), 'const x = 1;');
+
+    manager = new LspManager(null);
+    await assert.rejects(
+      () => manager!.getClientForFile(join(dir, 'orphan.ts')),
+      /could not auto-detect workspace/,
+    );
+  });
 });

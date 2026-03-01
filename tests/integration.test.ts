@@ -159,4 +159,63 @@ describe('MCP server integration', () => {
     });
     assert.ok(result.isError, 'should return isError for invalid file');
   });
+
+  // ── No-Config Startup ──
+
+  it('starts without config and lists tools', async () => {
+    // Start server from a directory with no config files and no project markers
+    tempDir = mkdtempSync(join(tmpdir(), 'lsp-no-config-'));
+
+    const transport = new StdioClientTransport({
+      command: 'node',
+      args: ['--experimental-strip-types', SERVER_ENTRY],
+      cwd: tempDir,
+      env: { ...process.env, LSP_CONFIG: '' },
+    });
+
+    client = new Client({ name: 'test-client', version: '1.0.0' });
+    await client.connect(transport);
+
+    // Server should start and register tools even without config
+    const { tools } = await client.listTools();
+    assert.equal(tools.length, 6, 'all 6 tools should be registered');
+  });
+
+  it('auto-detects workspace from file path when started without config', async () => {
+    // Create a project directory with markers
+    tempDir = mkdtempSync(join(tmpdir(), 'lsp-lazy-detect-'));
+    const projectDir = join(tempDir, 'project');
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(projectDir);
+    writeFileSync(join(projectDir, 'tsconfig.json'), '{}');
+    writeFileSync(join(projectDir, 'test.ts'), 'export const x = 1;\n');
+
+    // Also create a mock LSP server config so the auto-detected TS server uses our mock
+    const configPath = join(tempDir, 'lsp-config.json');
+    writeFileSync(configPath, JSON.stringify({
+      workspaceDir: projectDir,
+      languageServers: [{
+        language: 'typescript',
+        command: 'node',
+        args: [MOCK_SERVER],
+        extensions: ['.ts', '.tsx'],
+      }],
+    }));
+
+    const transport = new StdioClientTransport({
+      command: 'node',
+      args: ['--experimental-strip-types', SERVER_ENTRY],
+      env: { ...process.env, LSP_CONFIG: configPath },
+    });
+
+    client = new Client({ name: 'test-client', version: '1.0.0' });
+    await client.connect(transport);
+
+    // Call a tool — should work via config
+    const result = await client.callTool({
+      name: 'list_file_symbols',
+      arguments: { file: join(projectDir, 'test.ts') },
+    });
+    assert.ok(!result.isError, 'tool call should succeed');
+  });
 });

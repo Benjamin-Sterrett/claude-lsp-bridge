@@ -157,12 +157,12 @@ async function shutdown(manager: LspManager, server: McpServer): Promise<void> {
 // ── Main ──
 
 async function main(): Promise<void> {
-  let config;
+  let config: import('./config.ts').LspConfig | null = null;
   try {
     config = loadConfig();
-  } catch (err) {
-    console.error('claude-lsp-bridge: failed to load config:', err instanceof Error ? err.message : err);
-    process.exit(1);
+    console.error(`claude-lsp-bridge: loaded config for workspace ${config.workspaceDir}`);
+  } catch {
+    console.error('claude-lsp-bridge: no config found at startup — will auto-detect from file paths');
   }
 
   const manager = new LspManager(config);
