@@ -2,9 +2,11 @@ import type { Hover, MarkupContent, MarkedString } from 'vscode-languageserver-p
 import type { LspManager } from '../lsp/manager.ts';
 import {
   toLspPosition,
+  encodeCharacterOffset,
   toolSuccess,
   type ToolResult,
 } from '../types.ts';
+import { getLineContent } from './format.ts';
 
 export interface GetHoverParams {
   file: string;
@@ -19,6 +21,10 @@ export async function getHover(
   const client = await manager.getClientForFile(params.file);
   const uri = await client.syncFile(params.file);
   const lspPos = toLspPosition({ line: params.line, character: params.character });
+  const lineText = getLineContent(params.file, lspPos.line);
+  if (lineText !== null) {
+    lspPos.character = encodeCharacterOffset(lineText, lspPos.character, client.getPositionEncoding());
+  }
 
   const result = await client.sendRequest<Hover | null>(
     'textDocument/hover',

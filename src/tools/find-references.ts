@@ -3,10 +3,11 @@ import type { LspManager } from '../lsp/manager.ts';
 import {
   toLspPosition,
   toExternalPosition,
+  encodeCharacterOffset,
   toolSuccess,
   type ToolResult,
 } from '../types.ts';
-import { getLineTrimmed, safeUriToPath } from './format.ts';
+import { getLineTrimmed, getLineContent, safeUriToPath } from './format.ts';
 
 export interface FindReferencesParams {
   file: string;
@@ -22,6 +23,10 @@ export async function findReferences(
   const client = await manager.getClientForFile(params.file);
   const uri = await client.syncFile(params.file);
   const lspPos = toLspPosition({ line: params.line, character: params.character });
+  const lineText = getLineContent(params.file, lspPos.line);
+  if (lineText !== null) {
+    lspPos.character = encodeCharacterOffset(lineText, lspPos.character, client.getPositionEncoding());
+  }
 
   const result = await client.sendRequest<Location[] | null>(
     'textDocument/references',

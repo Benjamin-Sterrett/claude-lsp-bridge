@@ -68,3 +68,12 @@ export function getLineTrimmed(filePath: string, zeroBasedLine: number): string 
     return null;
   }
 }
+
+export function getLineContent(filePath: string, zeroBasedLine: number): string | null {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    return content.split('\n')[zeroBasedLine] ?? null;
+  } catch {
+    return null;
+  }
+}

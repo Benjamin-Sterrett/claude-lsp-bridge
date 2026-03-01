@@ -3,10 +3,11 @@ import type { LspManager } from '../lsp/manager.ts';
 import {
   toLspPosition,
   toExternalPosition,
+  encodeCharacterOffset,
   toolSuccess,
   type ToolResult,
 } from '../types.ts';
-import { getLinePreview, safeUriToPath } from './format.ts';
+import { getLinePreview, getLineContent, safeUriToPath } from './format.ts';
 
 export interface FindDefinitionParams {
   file: string;
@@ -21,6 +22,10 @@ export async function findDefinition(
   const client = await manager.getClientForFile(params.file);
   const uri = await client.syncFile(params.file);
   const lspPos = toLspPosition({ line: params.line, character: params.character });
+  const lineText = getLineContent(params.file, lspPos.line);
+  if (lineText !== null) {
+    lspPos.character = encodeCharacterOffset(lineText, lspPos.character, client.getPositionEncoding());
+  }
 
   const result = await client.sendRequest<Location | Location[] | LocationLink[] | null>(
     'textDocument/definition',
