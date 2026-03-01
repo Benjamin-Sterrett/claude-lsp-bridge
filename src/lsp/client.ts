@@ -47,6 +47,9 @@ export class LspClient {
   // Diagnostics cache: uri → DiagnosticsEntry
   private diagnosticsCache = new Map<string, DiagnosticsEntry>();
 
+  // Last sync timestamp per URI (for staleness detection when version is unavailable)
+  private lastSyncTime = new Map<string, number>();
+
   constructor(config: LspServerConfig, workspaceDir: string) {
     this.language = config.language;
     this.config = config;
@@ -230,11 +233,16 @@ export class LspClient {
     return this.openDocuments.get(uri)?.version;
   }
 
+  getLastSyncTime(uri: string): number | undefined {
+    return this.lastSyncTime.get(uri);
+  }
+
   async syncFile(filePath: string): Promise<string> {
     await this.ensureReady();
     const uri = filePathToUri(filePath);
     const content = readFileSync(filePath, 'utf-8');
     const existing = this.openDocuments.get(uri);
+    this.lastSyncTime.set(uri, Date.now());
 
     if (!existing) {
       // First time — didOpen (or didChange for change-only servers)

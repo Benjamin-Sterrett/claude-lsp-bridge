@@ -32,12 +32,27 @@ export async function getDiagnostics(
   const docVersion = client.getDocumentVersion(uri);
   let status: DiagnosticStatus;
 
-  // No diagnostics received at all, or diagnostics are from an older document version
-  if (!entry || (docVersion !== undefined && entry.version !== undefined && entry.version < docVersion)) {
+  const lastSync = client.getLastSyncTime(uri);
+
+  // No diagnostics received at all
+  if (!entry) {
     status = 'indexing';
     return toolSuccess(
       `## Diagnostics\n\n**Status:** ${status}\n\nNo diagnostics received yet. ` +
       `The language server may still be indexing. Try again in a few seconds.`,
+    );
+  }
+
+  // Staleness check: prefer version comparison, fall back to timestamp
+  const isStale = entry.version !== undefined && docVersion !== undefined
+    ? entry.version < docVersion
+    : lastSync !== undefined && entry.receivedAt < lastSync;
+
+  if (isStale) {
+    status = 'indexing';
+    return toolSuccess(
+      `## Diagnostics\n\n**Status:** ${status}\n\nDiagnostics may be stale — ` +
+      `the file was modified after the last diagnostics update. Try again in a few seconds.`,
     );
   }
 
