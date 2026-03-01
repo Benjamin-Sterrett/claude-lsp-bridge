@@ -270,6 +270,11 @@ export class LspClient {
     this.initPromise = (async () => {
       await new Promise((resolve) => setTimeout(resolve, RESTART_BACKOFF_MS));
 
+      // Abort restart if shutdown was called during backoff
+      if (this.disposed) {
+        throw new Error(`LspClient(${this.language}) was disposed during restart`);
+      }
+
       // Re-init from scratch
       await this.spawnAndInit();
 
@@ -296,6 +301,11 @@ export class LspClient {
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+
+    // Wait for any pending restart to abort before proceeding
+    if (this.initPromise) {
+      try { await this.initPromise; } catch { /* restart will abort via disposed check */ }
+    }
 
     if (this.connection && this.initialized) {
       try {

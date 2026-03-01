@@ -272,6 +272,20 @@ describe('LspManager', () => {
     );
   });
 
+  it('throws on duplicate language in config', () => {
+    const dir = makeTempDir();
+    assert.throws(
+      () => new LspManager({
+        workspaceDir: dir,
+        languageServers: [
+          makeServerConfig(),
+          makeServerConfig({ extensions: ['.tsx'] }),
+        ],
+      }),
+      /Duplicate language 'typescript'/,
+    );
+  });
+
   it('handles case-insensitive extension matching', async () => {
     const dir = makeTempDir();
     writeFileSync(join(dir, 'test.TS'), 'const x = 1;');
