@@ -173,7 +173,13 @@ export class LspClient {
       this.connection.dispose();
       this.connection = null;
       if (this.process && !this.process.killed) {
-        this.process.kill('SIGTERM');
+        const proc = this.process;
+        proc.kill('SIGTERM');
+        // Escalate to SIGKILL if process doesn't exit within 1s
+        const killTimer = setTimeout(() => {
+          if (!proc.killed) proc.kill('SIGKILL');
+        }, 1000);
+        killTimer.unref();
       }
       this.process = null;
       throw err;
@@ -331,13 +337,16 @@ export class LspClient {
 
         // LSP shutdown + exit with timeout
         let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
-        await Promise.race([
-          this.connection.sendRequest('shutdown'),
-          new Promise<void>((resolve) => {
-            shutdownTimer = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS);
-          }),
-        ]);
-        clearTimeout(shutdownTimer);
+        try {
+          await Promise.race([
+            this.connection.sendRequest('shutdown'),
+            new Promise<void>((resolve) => {
+              shutdownTimer = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          clearTimeout(shutdownTimer);
+        }
         await this.connection.sendNotification('exit');
       } catch {
         // Ignore errors during shutdown
