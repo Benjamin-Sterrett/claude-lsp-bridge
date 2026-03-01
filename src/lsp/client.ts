@@ -152,15 +152,28 @@ export class LspClient {
     };
 
     let initTimer: ReturnType<typeof setTimeout> | undefined;
-    const result = await Promise.race([
-      this.connection.sendRequest<InitializeResult>('initialize', initParams),
-      new Promise<never>((_, reject) => {
-        initTimer = setTimeout(
-          () => reject(new Error(`LSP initialize timed out after ${INIT_TIMEOUT_MS}ms`)),
-          INIT_TIMEOUT_MS,
-        );
-      }),
-    ]);
+    let result: InitializeResult;
+    try {
+      result = await Promise.race([
+        this.connection.sendRequest<InitializeResult>('initialize', initParams),
+        new Promise<never>((_, reject) => {
+          initTimer = setTimeout(
+            () => reject(new Error(`LSP initialize timed out after ${INIT_TIMEOUT_MS}ms`)),
+            INIT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } catch (err) {
+      clearTimeout(initTimer);
+      // Clean up spawned process on init failure
+      this.connection.dispose();
+      this.connection = null;
+      if (this.process && !this.process.killed) {
+        this.process.kill('SIGTERM');
+      }
+      this.process = null;
+      throw err;
+    }
     clearTimeout(initTimer);
 
     // Parse server capabilities
@@ -295,10 +308,14 @@ export class LspClient {
         this.openDocuments.clear();
 
         // LSP shutdown + exit with timeout
+        let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
         await Promise.race([
           this.connection.sendRequest('shutdown'),
-          new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+          new Promise<void>((resolve) => {
+            shutdownTimer = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS);
+          }),
         ]);
+        clearTimeout(shutdownTimer);
         await this.connection.sendNotification('exit');
       } catch {
         // Ignore errors during shutdown
