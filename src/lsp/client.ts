@@ -172,12 +172,13 @@ export class LspClient {
       // Clean up spawned process on init failure
       this.connection.dispose();
       this.connection = null;
-      if (this.process && !this.process.killed) {
+      if (this.process) {
         const proc = this.process;
         proc.kill('SIGTERM');
-        // Escalate to SIGKILL if process doesn't exit within 1s
+        // Escalate to SIGKILL if process hasn't exited within 1s
+        // Note: proc.killed only means signal was sent, not that process exited
         const killTimer = setTimeout(() => {
-          if (!proc.killed) proc.kill('SIGKILL');
+          if (proc.exitCode === null) proc.kill('SIGKILL');
         }, 1000);
         killTimer.unref();
       }
@@ -231,7 +232,7 @@ export class LspClient {
     const existing = this.openDocuments.get(uri);
 
     if (!existing) {
-      // First time — didOpen
+      // First time — didOpen (or didChange for change-only servers)
       this.openDocuments.set(uri, { version: 1, content });
       if (this.openCloseSupported) {
         await this.connection!.sendNotification('textDocument/didOpen', {
@@ -241,6 +242,13 @@ export class LspClient {
             version: 1,
             text: content,
           },
+        });
+      } else if (this.syncKind !== TextDocumentSyncKind.None) {
+        // Server supports change notifications but not openClose —
+        // send didChange with initial text so server has the document content
+        await this.connection!.sendNotification('textDocument/didChange', {
+          textDocument: { uri, version: 1 },
+          contentChanges: [{ text: content }],
         });
       }
     } else if (existing.content !== content) {
@@ -310,6 +318,11 @@ export class LspClient {
             text: doc.content,
           },
         });
+      } else if (this.syncKind !== TextDocumentSyncKind.None) {
+        await this.connection!.sendNotification('textDocument/didChange', {
+          textDocument: { uri, version: doc.version },
+          contentChanges: [{ text: doc.content }],
+        });
       }
     }
   }
@@ -357,11 +370,12 @@ export class LspClient {
     }
 
     // Force kill if still running
-    if (this.process && !this.process.killed) {
-      this.process.kill('SIGTERM');
+    if (this.process && this.process.exitCode === null) {
+      const proc = this.process;
+      proc.kill('SIGTERM');
       setTimeout(() => {
-        if (this.process && !this.process.killed) {
-          this.process.kill('SIGKILL');
+        if (proc.exitCode === null) {
+          proc.kill('SIGKILL');
         }
       }, 1000);
     }
