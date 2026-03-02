@@ -11,7 +11,8 @@
       "language": "python",
       "command": "pyright-langserver",
       "args": ["--stdio"],
-      "extensions": [".py", ".pyi"]
+      "extensions": [".py", ".pyi"],
+      "initTimeout": 120000
     }
   ]
 }

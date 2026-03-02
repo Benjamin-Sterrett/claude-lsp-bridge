@@ -11,6 +11,7 @@ const LspServerConfigSchema = z.object({
   extensions: z.array(z.string().startsWith('.', 'extensions must start with .')).min(1, 'at least one extension required'),
   env: z.record(z.string()).optional(),
   initializationOptions: z.record(z.unknown()).optional(),
+  initTimeout: z.number().int().positive().optional(),
   rootMarkers: z.array(z.string()).optional(),
 }).strict();
 

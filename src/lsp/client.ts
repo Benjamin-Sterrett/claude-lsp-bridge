@@ -16,7 +16,7 @@ import {
 import { filePathToUri, type PositionEncoding } from '../types.ts';
 import type { LspServerConfig } from '../config.ts';
 
-const INIT_TIMEOUT_MS = 45_000;
+const DEFAULT_INIT_TIMEOUT_MS = 45_000;
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 const RESTART_BACKOFF_MS = 2_000;
 
@@ -50,10 +50,13 @@ export class LspClient {
   // Last sync timestamp per URI (for staleness detection when version is unavailable)
   private lastSyncTime = new Map<string, number>();
 
+  private initTimeoutMs: number;
+
   constructor(config: LspServerConfig, workspaceDir: string) {
     this.language = config.language;
     this.config = config;
     this.workspaceDir = workspaceDir;
+    this.initTimeoutMs = config.initTimeout ?? DEFAULT_INIT_TIMEOUT_MS;
   }
 
   async initialize(): Promise<void> {
@@ -165,8 +168,8 @@ export class LspClient {
         this.connection.sendRequest<InitializeResult>('initialize', initParams),
         new Promise<never>((_, reject) => {
           initTimer = setTimeout(
-            () => reject(new Error(`LSP initialize timed out after ${INIT_TIMEOUT_MS}ms`)),
-            INIT_TIMEOUT_MS,
+            () => reject(new Error(`LSP initialize timed out after ${this.initTimeoutMs}ms`)),
+            this.initTimeoutMs,
           );
         }),
       ]);
