@@ -20,7 +20,7 @@ pip install pyright
 ## Installation
 
 ```bash
-git clone https://github.com/benshph-blip/claude-lsp-bridge.git
+git clone https://github.com/Benjamin-Sterrett/claude-lsp-bridge.git
 cd claude-lsp-bridge
 pnpm install
 pnpm build
